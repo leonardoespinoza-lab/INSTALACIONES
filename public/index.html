@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Horatech Sitios</title>
+    <link rel="stylesheet" href="/styles.css?v=20260603-2" />
+  </head>
+  <body>
+    <section id="login-view" class="login-view">
+      <form id="login-form" class="login-card">
+        <p class="eyebrow">HORATECH</p>
+        <h1>Seguimiento de sitios</h1>
+        <p>Ingresá con tu usuario para continuar.</p>
+        <label>Usuario <input id="login-username" autocomplete="username" required /></label>
+        <label>Contraseña <input id="login-password" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-button" type="submit">Iniciar sesión</button>
+        <div id="login-error" class="error-text"></div>
+      </form>
+    </section>
+
+    <div id="app-shell" class="hidden">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">HORATECH</p>
+          <h1>Seguimiento de sitios</h1>
+        </div>
+        <nav>
+          <button class="nav-button active" data-view="sites">Sitios</button>
+          <button class="nav-button admin-only" data-view="reports">Informes</button>
+          <button class="nav-button admin-only" data-view="users">Usuarios</button>
+          <span id="current-user" class="current-user"></span>
+          <button id="logout" class="nav-button">Salir</button>
+        </nav>
+      </header>
+
+      <main>
+        <section id="sites-view" class="view">
+          <div class="hero-card">
+            <div>
+              <p class="eyebrow">OPERACIÓN EN CALLE</p>
+              <h2>¿Qué sitios tenemos que visitar?</h2>
+              <p>Filtrá por partido, abrí el mapa y registrá cada instalación.</p>
+            </div>
+            <div id="site-kpis" class="kpis"></div>
+          </div>
+
+          <div class="toolbar">
+            <input id="search" type="search" placeholder="Buscar cliente, número o dirección" />
+            <select id="district-filter"><option value="">Todos los partidos</option></select>
+            <select id="status-filter">
+              <option value="">Todos los estados</option>
+              <option value="PENDIENTE">Pendientes</option>
+              <option value="INSTALADO">Instalados</option>
+            </select>
+          </div>
+
+          <div id="district-cards" class="district-cards"></div>
+          <div id="sites-list"></div>
+        </section>
+
+        <section id="reports-view" class="view hidden">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">CONTROL OPERATIVO</p>
+              <h2>Informes de sitios visitados</h2>
+            </div>
+            <button id="download-pdf" class="primary-button">Descargar PDF</button>
+          </div>
+
+          <div class="toolbar">
+            <label>Mes <input id="report-month" type="month" /></label>
+            <label>Desde <input id="report-from" type="date" /></label>
+            <label>Hasta <input id="report-to" type="date" /></label>
+            <select id="report-district"><option value="">Todos los partidos</option></select>
+            <select id="report-locality"><option value="">Todas las localidades</option></select>
+            <select id="report-technician"><option value="">Todos los técnicos</option></select>
+          <select id="report-status">
+              <option value="">Todos los resultados</option>
+              <option value="INSTALADO">Instalados</option>
+              <option value="NO_INSTALADO">No instalados</option>
+            </select>
+            <button id="refresh-report" class="primary-button">Actualizar</button>
+          </div>
+
+          <div id="report-kpis" class="kpis report-kpis"></div>
+          <div class="report-grid">
+            <article class="panel">
+              <h3>Por técnico</h3>
+              <div id="by-technician"></div>
+            </article>
+            <article class="panel">
+              <h3>Por mes</h3>
+              <div id="by-month"></div>
+            </article>
+          </div>
+          <article class="panel">
+            <h3>Detalle de visitas</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Resultado</th>
+                    <th>Técnico</th>
+                    <th>Sitio</th>
+                    <th>Partido / Localidad</th>
+                    <th>Notas</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="report-rows"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section id="users-view" class="view hidden">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">ADMINISTRACIÓN</p>
+              <h2>Usuarios y roles</h2>
+            </div>
+            <button id="open-user-dialog" class="primary-button">Crear usuario</button>
+          </div>
+          <article class="panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Usuario</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="user-rows"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <dialog id="install-dialog">
+        <form id="install-form" method="dialog">
+          <button type="button" class="dialog-close" data-close="install-dialog" aria-label="Cerrar">×</button>
+          <p class="eyebrow">REGISTRAR VISITA</p>
+          <h2 id="install-site-name"></h2>
+          <input id="install-site-id" type="hidden" />
+          <label id="install-technician-label">
+            Técnico
+            <select id="install-technician"></select>
+          </label>
+          <label>Fecha y hora <input id="install-date" type="datetime-local" required /></label>
+          <label>Notas <textarea id="install-notes" rows="3" placeholder="Opcional"></textarea></label>
+          <button class="primary-button" type="submit">Marcar como instalado</button>
+        </form>
+      </dialog>
+
+      <dialog id="visit-dialog">
+        <form id="visit-form" method="dialog">
+          <button type="button" class="dialog-close" data-close="visit-dialog" aria-label="Cerrar">×</button>
+          <p class="eyebrow">REGISTRAR INTENTO</p>
+          <h2 id="visit-site-name"></h2>
+          <input id="visit-site-id" type="hidden" />
+          <label id="visit-technician-label">
+            Técnico
+            <select id="visit-technician"></select>
+          </label>
+          <label>Fecha y hora <input id="visit-date" type="datetime-local" required /></label>
+          <label>
+            Motivo por el que no se instaló
+            <textarea id="visit-notes" rows="4" placeholder="Ejemplo: no se pudo acceder porque la llave no corresponde" required></textarea>
+          </label>
+          <button class="primary-button" type="submit">Guardar comentario</button>
+        </form>
+      </dialog>
+
+      <dialog id="user-dialog">
+        <form id="user-form" method="dialog">
+          <button type="button" class="dialog-close" data-close="user-dialog" aria-label="Cerrar">×</button>
+          <p class="eyebrow">NUEVO ACCESO</p>
+          <h2>Crear usuario</h2>
+          <label>Nombre completo <input id="user-name" required /></label>
+          <label>Usuario <input id="user-username" required /></label>
+          <label>Contraseña inicial <input id="user-password" type="password" minlength="8" required /></label>
+          <label>
+            Rol
+            <select id="user-role">
+              <option value="TECHNICIAN">Técnico</option>
+              <option value="ADMIN">Administrador</option>
+            </select>
+          </label>
+          <button class="primary-button" type="submit">Crear usuario</button>
+        </form>
+      </dialog>
+
+      <div id="toast" class="toast hidden"></div>
+    </div>
+    <script src="/app.js?v=20260603-2" type="module"></script>
+  </body>
+</html>
