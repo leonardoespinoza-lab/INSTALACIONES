@@ -70,6 +70,7 @@ async function startApp(user) {
   $("#install-technician-label").classList.toggle("hidden", !isAdmin());
   $("#visit-technician-label").classList.toggle("hidden", !isAdmin());
   await loadProjects();
+  state.mapConfig = await api('/api/map-config');
   await loadDistricts();
   if (isAdmin()) await loadTechnicians();
   await loadSites();
@@ -342,7 +343,7 @@ function showView(name) {
   document.querySelectorAll(".nav-button[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === name);
   });
-  if (name === "sites" && sitesMap) requestAnimationFrame(() => sitesMap.invalidateSize());
+  if (name === "sites" && sitesMap) requestAnimationFrame(() => sitesMap.resize());
   if (name === "reports") loadReport();
   if (name === "users") loadUsers();
 }
@@ -467,39 +468,46 @@ $("#search").addEventListener("input", () => {
 });
 
 let sitesMap = null;
-let mapLayer = null;
+let mapMarkers = [];
 let mapSignature = '';
 function hasCoordinates(site) {
   return Number.isFinite(site.latitude) && Number.isFinite(site.longitude) &&
     Math.abs(site.latitude) <= 90 && Math.abs(site.longitude) <= 180;
 }
 function fitMap() {
-  if (mapLayer?.getLayers().length) sitesMap.fitBounds(mapLayer.getBounds().pad(0.08), { maxZoom: 16 });
+  const points = state.sites.filter(hasCoordinates);
+  if (!sitesMap || !points.length) return;
+  const bounds = new mapboxgl.LngLatBounds();
+  points.forEach(site => bounds.extend([site.longitude, site.latitude]));
+  $('#toggle-map-perspective').textContent = 'Vista 2D';
+  sitesMap.fitBounds(bounds, { padding: 55, maxZoom: 16, pitch: 55, bearing: -15, duration: 600 });
 }
 function renderMap() {
   const visible = state.sites.filter(hasCoordinates);
   $('#map-count').textContent = `${visible.length} sitios ubicados de ${state.sites.length} sitios visibles`;
   const missing = state.sites.length - visible.length;
   $('#map-missing').textContent = missing ? `${missing} sitios sin coordenadas. Permanecen en el listado para completar su ubicación.` : '';
-  if (!window.L) { $('#map-missing').textContent = 'No se pudo cargar el mapa. El listado sigue disponible.'; return; }
-  if (!sitesMap) {
-    sitesMap = L.map('sites-map').setView([-32.1, -63.8], 7);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(sitesMap);
-    mapLayer = L.featureGroup().addTo(sitesMap);
-    mapLayer.on('popupopen', event => {
-      const element = event.popup.getElement();
-      L.DomEvent.disableClickPropagation(element);
-      element.onclick = event => {
-        const install = event.target.closest('[data-install]');
-        const visit = event.target.closest('[data-visit]');
-        if (install) openInstall(install.dataset.install);
-        if (visit) openVisit(visit.dataset.visit);
-      };
-    });
+  if (!window.mapboxgl || !state.mapConfig?.token) {
+    $('#map-missing').textContent = 'No se pudo cargar Mapbox. El listado sigue disponible.'; return;
   }
-  mapLayer.clearLayers();
+  if (!sitesMap) {
+    try {
+      sitesMap = new mapboxgl.Map({
+        container: 'sites-map', accessToken: state.mapConfig.token,
+        style: 'mapbox://styles/mapbox/standard', center: [-63.8, -32.1],
+        zoom: 7, pitch: 55, bearing: -15, antialias: true,
+        config: { basemap: { lightPreset: 'day', showRoadLabels: true, show3dObjects: true } }
+      });
+      sitesMap.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+      sitesMap.on('error', () => {
+        $('#map-missing').textContent = 'No se pudo cargar una parte del mapa. Revisá la conexión o el acceso a Mapbox.';
+      });
+    } catch {
+      $('#map-missing').textContent = 'Este navegador no pudo iniciar la vista 3D. El listado sigue disponible.'; return;
+    }
+  }
+  mapMarkers.forEach(marker => marker.remove());
+  mapMarkers = [];
   // Exact coincident coordinates share one popup so every meter remains accessible.
   const groups = new Map();
   for (const site of visible) {
@@ -512,24 +520,39 @@ function renderMap() {
     const mixed = installed > 0 && installed < group.length;
     const color = installed === group.length ? '#14845d' : '#d97706';
     const point = group[0];
-    const marker = L.circleMarker([point.latitude, point.longitude], {
-      radius: group.length > 1 ? 10 : 7, color: mixed ? '#14845d' : '#ffffff',
-      weight: mixed ? 4 : 2, fillColor: color, fillOpacity: 0.95,
-    });
-    marker.bindTooltip(group.length > 1 ? `${group.length} sitios: ${installed} instalados` :
-      `Medidor ${point.meter_number || point.external_id} · ${installed ? 'Instalado' : 'Pendiente'}`);
-    marker.bindPopup(group.map(site => `<div class="map-site"><strong>${escapeHtml(site.client)}</strong>
+    const element = document.createElement('button');
+    element.className = 'mapbox-site-marker';
+    element.style.backgroundColor = color;
+    element.style.borderColor = mixed ? '#14845d' : '#fff';
+    element.style.borderWidth = mixed ? '4px' : '2px';
+    element.title = group.length > 1 ? `${group.length} sitios: ${installed} instalados` :
+      `Medidor ${point.meter_number || point.external_id} · ${installed ? 'Instalado' : 'Pendiente'}`;
+    element.setAttribute('aria-label', element.title);
+    element.textContent = group.length > 1 ? group.length : '';
+    const content = document.createElement('div');
+    content.className = 'map-popup-content';
+    content.innerHTML = group.map(site => `<div class="map-site"><strong>${escapeHtml(site.client)}</strong>
       <div>${escapeHtml(site.address)}</div><div>Medidor ${escapeHtml(site.meter_number || '')}</div>
       <div class="map-status ${site.installation_status === 'INSTALADO' ? 'installed' : 'pending'}">${site.installation_status === 'INSTALADO' ? 'Instalado' : 'Pendiente'}</div>
       ${site.source_data?.locationReview ? `<p class="location-review">${escapeHtml(site.source_data.locationReview)}</p>` : ''}
       <a href="${escapeHtml(site.map_url)}" target="_blank" rel="noreferrer">Abrir ubicación</a>
       ${site.installation_status !== 'INSTALADO' ? `<button class="primary-button" data-install="${site.id}">Marcar instalado</button>` : ''}
-      <button class="secondary-button" data-visit="${site.id}">Comentar visita</button></div>`).join(''), { maxHeight: 330 });
-    marker.addTo(mapLayer);
+      <button class="secondary-button" data-visit="${site.id}">Comentar visita</button></div>`).join('');
+    content.onclick = event => {
+      event.stopPropagation();
+      const install = event.target.closest('[data-install]');
+      const visit = event.target.closest('[data-visit]');
+      if (install) openInstall(install.dataset.install);
+      if (visit) openVisit(visit.dataset.visit);
+    };
+    const popup = new mapboxgl.Popup({ offset: 15, maxWidth: '330px' }).setDOMContent(content);
+    const marker = new mapboxgl.Marker({ element, anchor: 'center' })
+      .setLngLat([point.longitude, point.latitude]).setPopup(popup).addTo(sitesMap);
+    mapMarkers.push(marker);
   }
   const signature = `${state.projectKey}|${visible.map(site => `${site.id}:${site.latitude}:${site.longitude}`).join(',')}`;
   if (signature !== mapSignature) { fitMap(); mapSignature = signature; }
-  requestAnimationFrame(() => sitesMap.invalidateSize());
+  requestAnimationFrame(() => sitesMap.resize());
 }
 
 $('#fit-map').addEventListener('click', fitMap);
@@ -563,3 +586,10 @@ try {
 } catch {
   showLogin();
 }
+
+$('#toggle-map-perspective').addEventListener('click', () => {
+  if (!sitesMap) return;
+  const flat = sitesMap.getPitch() > 10;
+  sitesMap.easeTo({ pitch: flat ? 0 : 55, bearing: flat ? 0 : -15, duration: 650 });
+  $('#toggle-map-perspective').textContent = flat ? 'Vista 3D' : 'Vista 2D';
+});

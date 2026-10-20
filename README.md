@@ -95,5 +95,8 @@ node scripts/import-project.mjs /ruta/privada/proyecto.json --apply
 
 Para una vista local en memoria, PROJECT_IMPORT_FILE puede señalar el JSON privado.
 Leaflet 1.9.4 se distribuye localmente en public/vendor/leaflet con su licencia BSD.
-Los mapas base requieren conexión a OpenStreetMap. El cambio de estado se guarda
+Los mapas base usan Mapbox Standard con nombres de calles y vista 3D inicial.
+Configurar MAPBOX_PUBLIC_TOKEN en Railway con un token público pk. El token no se
+versiona en el repositorio. Se puede alternar entre las vistas 2D y 3D desde el mapa.
+Los edificios 3D se muestran donde el proveedor tiene cobertura. El cambio de estado se guarda
 en PostgreSQL en producción y se refleja en el mapa después de registrarlo.

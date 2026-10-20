@@ -588,3 +588,8 @@ dialog form {
 .map-status { font-weight:800; margin:6px 0; }
 .map-status.installed { color:#14845d; } .map-status.pending { color:#ad5f00; }
 @media(max-width:760px) { #sites-map { height:380px; } .site-actions { flex-wrap:wrap; } }
+
+.mapbox-site-marker { width:22px; height:22px; border-style:solid; border-radius:50%; box-shadow:0 3px 9px rgba(0,0,0,.3); color:white; font-size:10px; font-weight:800; padding:0; cursor:pointer; }
+.map-popup-content { max-height:330px; overflow:auto; }
+.mapboxgl-popup-content { border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(20,40,61,.2); }
+.map-heading { flex-wrap:wrap; } .map-heading h3 { margin-right:auto; }

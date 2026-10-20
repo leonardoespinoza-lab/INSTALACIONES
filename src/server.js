@@ -98,6 +98,12 @@ app.post("/api/auth/logout", requireUser, async (req, res, next) => {
 
 app.get("/api/auth/me", requireUser, (req, res) => res.json(req.user));
 
+app.get('/api/map-config', requireUser, (_req, res) => {
+  const token = (process.env.MAPBOX_PUBLIC_TOKEN || '').trim();
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ token: token.startsWith('pk.') ? token : '', style: 'mapbox/standard' });
+});
+
 app.get('/api/projects', requireUser, async (_req, res, next) => {
   try { res.json(await listProjects()); } catch (error) { next(error); }
 });
