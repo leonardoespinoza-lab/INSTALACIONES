@@ -302,14 +302,17 @@ dialog label {
   min-width: 0;
   border-radius: 14px;
   padding: 16px;
+  border: 0;
+  box-shadow: 0 2px 5px rgba(20, 40, 61, 0.04),
+    0 12px 28px rgba(20, 40, 61, 0.10);
+  transition: box-shadow 180ms ease;
 }
 
-.site-card.installed {
-  border-left: 5px solid var(--green);
-}
-
-.site-card.pending {
-  border-left: 5px solid var(--amber);
+@media (hover: hover) {
+  .site-card:hover {
+    box-shadow: 0 3px 7px rgba(20, 40, 61, 0.05),
+      0 16px 36px rgba(20, 40, 61, 0.14);
+  }
 }
 
 .site-head {
@@ -350,19 +353,11 @@ dialog label {
   white-space: nowrap;
 }
 
-.badge.pending {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.badge.installed {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
+.badge.pending,
+.badge.installed,
 .badge.not-located {
-  background: var(--red-soft);
-  color: var(--red);
+  background: #f0f3f6;
+  color: #455568;
 }
 
 .site-actions {
@@ -587,7 +582,7 @@ dialog form {
 .dot.pending { background:#d97706; } .dot.installed { background:#14845d; }
 .dot.mixed { background:#d97706; border:3px solid #14845d; }
 .map-note { color:var(--muted); font-size:.85rem; margin:8px 0; }
-.location-review { color:#8b5200; background:#fff4dd; border-radius:6px; padding:7px; font-size:.8rem; }
+.location-review { color:#455568; background:#f4f6f8; border-radius:6px; padding:7px; font-size:.8rem; }
 .map-site { padding:8px 0; border-bottom:1px solid var(--line); }
 .map-site button { margin:8px 4px 0 0; font-size:.8rem; }
 .map-status { font-weight:800; margin:6px 0; }
