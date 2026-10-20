@@ -476,6 +476,7 @@ $("#search").addEventListener("input", () => {
 });
 
 let sitesMap = null;
+let mapStyle = 'standard-satellite';
 let mapMarkers = [];
 let mapSignature = '';
 function hasCoordinates(site) {
@@ -502,7 +503,7 @@ function renderMap() {
     try {
       sitesMap = new mapboxgl.Map({
         container: 'sites-map', accessToken: state.mapConfig.token,
-        style: 'mapbox://styles/mapbox/standard', center: [-63.8, -32.1],
+        style: `mapbox://styles/mapbox/${mapStyle}`, center: [-63.8, -32.1],
         zoom: 7, pitch: 55, bearing: -15, antialias: true,
         config: { basemap: { lightPreset: 'day', showRoadLabels: true, show3dObjects: true } }
       });
@@ -602,4 +603,15 @@ $('#toggle-map-perspective').addEventListener('click', () => {
   const flat = sitesMap.getPitch() > 10;
   sitesMap.easeTo({ pitch: flat ? 0 : 55, bearing: flat ? 0 : -15, duration: 650 });
   $('#toggle-map-perspective').textContent = flat ? 'Vista 3D' : 'Vista 2D';
+});
+
+document.querySelectorAll('input[name="map-layer"]').forEach(input => {
+  input.addEventListener('change', () => {
+    if (!input.checked || !['standard-satellite', 'standard'].includes(input.value)) return;
+    mapStyle = input.value;
+    if (sitesMap) sitesMap.setStyle(`mapbox://styles/mapbox/${mapStyle}`, {
+      config: { basemap: { lightPreset: 'day', showRoadLabels: true, show3dObjects: true } }
+    });
+    $('#map-layers').open = false;
+  });
 });

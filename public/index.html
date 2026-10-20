@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Horatech Sitios</title>
     <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.32.0/mapbox-gl.css" />
-    <link rel="stylesheet" href="/styles.css?v=20261020-mapbox3d" />
+    <link rel="stylesheet" href="/styles.css?v=20261020-capas" />
   </head>
   <body>
     <section id="login-view" class="login-view">
@@ -62,7 +62,19 @@
           </div>
 
           <section class="panel map-panel" aria-label="Mapa de sitios">
-            <div class="map-heading"><h3>Mapa de sitios</h3><button id="toggle-map-perspective" class="secondary-button">Vista 2D</button><button id="fit-map" class="secondary-button">Ver todos</button></div>
+            <div class="map-heading">
+              <h3>Mapa de sitios</h3>
+              <details id="map-layers" class="map-layers">
+                <summary class="secondary-button">Capas</summary>
+                <fieldset>
+                  <legend>Vista del mapa</legend>
+                  <label><input type="radio" name="map-layer" value="standard-satellite" checked /> Satelital con calles</label>
+                  <label><input type="radio" name="map-layer" value="standard" /> Calles y edificios</label>
+                </fieldset>
+              </details>
+              <button id="toggle-map-perspective" class="secondary-button">Vista 2D</button>
+              <button id="fit-map" class="secondary-button">Ver todos</button>
+            </div>
             <div class="map-legend"><span><i class="dot pending"></i>Pendiente</span><span><i class="dot installed"></i>Instalado</span><span><i class="dot mixed"></i>Grupo parcialmente instalado</span><span id="map-count"></span></div>
             <p id="map-missing" class="map-note"></p>
             <div id="sites-map" aria-label="Ubicaciones de sitios"></div>
@@ -211,6 +223,6 @@
       <div id="toast" class="toast hidden"></div>
     </div>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.32.0/mapbox-gl.js"></script>
-    <script src="/app.js?v=20261020-medidores" type="module"></script>
+    <script src="/app.js?v=20261020-capas" type="module"></script>
   </body>
 </html>

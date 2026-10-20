@@ -593,3 +593,9 @@ dialog form {
 .map-popup-content { max-height:330px; overflow:auto; }
 .mapboxgl-popup-content { border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(20,40,61,.2); }
 .map-heading { flex-wrap:wrap; } .map-heading h3 { margin-right:auto; }
+.map-layers { position:relative; }
+.map-layers summary { cursor:pointer; list-style:none; }
+.map-layers summary::-webkit-details-marker { display:none; }
+.map-layers fieldset { position:absolute; right:0; top:calc(100% + 8px); z-index:5; width:235px; margin:0; padding:14px; background:white; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
+.map-layers legend { font-size:.8rem; color:var(--muted); }
+.map-layers label { display:flex; align-items:center; gap:8px; padding:8px 0; cursor:pointer; font-size:.9rem; }
