@@ -73,3 +73,27 @@ Para producción:
 5. Railway ejecuta `npm start`.
 
 Al iniciar por primera vez, la app crea las tablas e importa los sitios. Los reinicios posteriores no duplican la información.
+
+## Proyectos y mapa
+
+Los sitios existentes quedan en NUC 2026 conservando sus IDs, usuarios, visitas y estados.
+El selector de proyecto filtra sitios, mapa, localidades e informes (incluido PDF).
+El mapa usa puntos naranjas para pendientes y verdes para instalados. Los sitios
+coincidentes comparten una ventana con todos los medidores; un borde verde indica
+un grupo parcialmente instalado. Los sitios sin coordenadas quedan en el listado
+y un administrador puede completar su punto con coordenadas verificadas.
+
+La migración agrega projects, sites.project_key y sites.source_data. La importación
+de un proyecto se ejecuta como operación separada, dentro de una transacción y sin
+sobrescribir sitios existentes. No se deben versionar listados privados ni claves.
+
+```sh
+# Con DATABASE_URL configurada. Por defecto hace una simulación y ROLLBACK.
+node scripts/import-project.mjs /ruta/privada/proyecto.json
+node scripts/import-project.mjs /ruta/privada/proyecto.json --apply
+```
+
+Para una vista local en memoria, PROJECT_IMPORT_FILE puede señalar el JSON privado.
+Leaflet 1.9.4 se distribuye localmente en public/vendor/leaflet con su licencia BSD.
+Los mapas base requieren conexión a OpenStreetMap. El cambio de estado se guarda
+en PostgreSQL en producción y se refleja en el mapa después de registrarlo.

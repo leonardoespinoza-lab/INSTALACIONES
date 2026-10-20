@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Horatech Sitios</title>
-    <link rel="stylesheet" href="/styles.css?v=20260603-2" />
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="/styles.css?v=20261020" />
   </head>
   <body>
     <section id="login-view" class="login-view">
@@ -35,6 +36,11 @@
       </header>
 
       <main>
+        <div class="project-toolbar">
+          <label for="project-filter">Proyecto</label>
+          <select id="project-filter" aria-label="Proyecto"></select>
+          <span id="project-description"></span>
+        </div>
         <section id="sites-view" class="view">
           <div class="hero-card">
             <div>
@@ -55,6 +61,12 @@
             </select>
           </div>
 
+          <section class="panel map-panel" aria-label="Mapa de sitios">
+            <div class="map-heading"><h3>Mapa de sitios</h3><button id="fit-map" class="secondary-button">Ver todos</button></div>
+            <div class="map-legend"><span><i class="dot pending"></i>Pendiente</span><span><i class="dot installed"></i>Instalado</span><span><i class="dot mixed"></i>Grupo parcialmente instalado</span><span id="map-count"></span></div>
+            <p id="map-missing" class="map-note"></p>
+            <div id="sites-map" aria-label="Ubicaciones de sitios"></div>
+          </section>
           <div id="district-cards" class="district-cards"></div>
           <div id="sites-list"></div>
         </section>
@@ -198,6 +210,7 @@
 
       <div id="toast" class="toast hidden"></div>
     </div>
-    <script src="/app.js?v=20260603-2" type="module"></script>
+    <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/app.js?v=20261020" type="module"></script>
   </body>
 </html>

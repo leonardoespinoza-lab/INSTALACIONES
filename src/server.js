@@ -15,6 +15,8 @@ import {
   listSites,
   listTechnicians,
   listUsers,
+  listProjects,
+  updateCoordinates,
   recordUnsuccessfulVisit,
   reopenSite,
   resetUserPassword,
@@ -96,6 +98,15 @@ app.post("/api/auth/logout", requireUser, async (req, res, next) => {
 
 app.get("/api/auth/me", requireUser, (req, res) => res.json(req.user));
 
+app.get('/api/projects', requireUser, async (_req, res, next) => {
+  try { res.json(await listProjects()); } catch (error) { next(error); }
+});
+
+app.post('/api/sites/:id/coordinates', requireUser, requireAdmin, async (req, res, next) => {
+  try { res.json(await updateCoordinates(req.params.id, req.body.latitude, req.body.longitude)); }
+  catch (error) { next(error); }
+});
+
 app.get("/api/sites", requireUser, async (req, res, next) => {
   try {
     res.json(await listSites(req.query));
@@ -104,9 +115,9 @@ app.get("/api/sites", requireUser, async (req, res, next) => {
   }
 });
 
-app.get("/api/districts", requireUser, async (_req, res, next) => {
+app.get("/api/districts", requireUser, async (req, res, next) => {
   try {
-    res.json(await listDistricts());
+    res.json(await listDistricts(req.query.projectKey ?? ""));
   } catch (error) {
     next(error);
   }
@@ -114,7 +125,7 @@ app.get("/api/districts", requireUser, async (_req, res, next) => {
 
 app.get("/api/localities", requireUser, async (req, res, next) => {
   try {
-    res.json(await listLocalities(req.query.district ?? ""));
+    res.json(await listLocalities(req.query.district ?? "", req.query.projectKey ?? ""));
   } catch (error) {
     next(error);
   }
@@ -216,10 +227,12 @@ app.get("/api/reports", requireUser, requireAdmin, async (req, res, next) => {
 app.get("/api/reports/pdf", requireUser, requireAdmin, async (req, res, next) => {
   try {
     const report = await getReport(req.query);
+    const project = (await listProjects()).find(item => item.key === req.query.projectKey);
+    const filters = { ...req.query, projectName: project?.name };
     const fileName = `informe-horatech-${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    renderReportPdf(res, report, req.query, req.user);
+    renderReportPdf(res, report, filters, req.user);
   } catch (error) {
     next(error);
   }
@@ -246,6 +259,7 @@ function renderReportPdf(stream, report, filters, user) {
   doc.moveDown(0.5);
   doc.fontSize(10).fillColor("#1d2935").text(
     [
+      filters.projectName ? `Proyecto: ${filters.projectName}` : null,
       filters.from ? `Desde ${filters.from}` : null,
       filters.to ? `Hasta ${filters.to}` : null,
       filters.district ? `Partido: ${filters.district}` : null,

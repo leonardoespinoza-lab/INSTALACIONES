@@ -1,5 +1,7 @@
 const state = {
   user: null,
+  projects: [],
+  projectKey: "nuc-2026",
   sites: [],
   districts: [],
   technicians: [],
@@ -67,6 +69,7 @@ async function startApp(user) {
   });
   $("#install-technician-label").classList.toggle("hidden", !isAdmin());
   $("#visit-technician-label").classList.toggle("hidden", !isAdmin());
+  await loadProjects();
   await loadDistricts();
   if (isAdmin()) await loadTechnicians();
   await loadSites();
@@ -85,8 +88,27 @@ async function loadTechnicians() {
     `<option value="">Todos los técnicos</option>${options}`;
 }
 
+async function loadProjects() {
+  state.projects = await api('/api/projects');
+  $('#project-filter').innerHTML = state.projects.map(project =>
+    `<option value="${escapeHtml(project.key)}">${escapeHtml(project.name)} (${project.total})</option>`).join('');
+  const remembered = localStorage.getItem('horatech-project');
+  state.projectKey = state.projects.some(project => project.key === remembered) ? remembered : state.projects[0]?.key || '';
+  $('#project-filter').value = state.projectKey;
+  updateProjectDescription();
+}
+
+function updateProjectDescription() {
+  $('#project-description').textContent = state.projects.find(project => project.key === state.projectKey)?.name || '';
+}
+
 async function loadDistricts() {
-  state.districts = await api("/api/districts");
+  const projectKey = state.projectKey;
+  const selected = $('#district-filter').value;
+  const reportSelected = $('#report-district').value;
+  const districts = await api(`/api/districts?${new URLSearchParams({ projectKey })}`);
+  if (projectKey !== state.projectKey) return;
+  state.districts = districts;
   const options = state.districts
     .map(
       (item) =>
@@ -95,6 +117,8 @@ async function loadDistricts() {
     .join("");
   $("#district-filter").innerHTML = `<option value="">Todos los partidos</option>${options}`;
   $("#report-district").innerHTML = `<option value="">Todos los partidos</option>${options}`;
+  if (state.districts.some(item => item.district === selected)) $('#district-filter').value = selected;
+  if (state.districts.some(item => item.district === reportSelected)) $('#report-district').value = reportSelected;
   renderDistrictCards();
 }
 
@@ -115,12 +139,18 @@ function renderDistrictCards() {
 
 async function loadSites() {
   const params = new URLSearchParams({
+    projectKey: state.projectKey,
     district: $("#district-filter").value,
     status: $("#status-filter").value,
     q: $("#search").value.trim(),
   });
-  state.sites = await api(`/api/sites?${params}`);
+  const requestKey = params.toString();
+  state.siteRequestKey = requestKey;
+  const sites = await api(`/api/sites?${params}`);
+  if (state.siteRequestKey !== requestKey) return;
+  state.sites = sites;
   renderSites();
+  renderMap();
 }
 
 function renderSites() {
@@ -164,7 +194,13 @@ function siteCard(site) {
       </div>
       <div class="site-address">${escapeHtml(site.address || "Sin dirección")}</div>
       <div class="site-meta">Localidad: ${escapeHtml(site.locality)}${site.meter_number ? ` · Medidor ${escapeHtml(site.meter_number)}` : ""}</div>
-      ${!located ? `<span class="badge not-located">No se pudo ubicar</span>` : ""}
+      ${site.meter_brand ? `<div class="site-meta">Marca: ${escapeHtml(site.meter_brand)}</div>` : ''}
+      ${site.meter_model ? `<div class="site-meta">Modelo: ${escapeHtml(site.meter_model)}</div>` : ''}
+      ${site.source_data?.brandCode && !site.meter_brand ? `<div class="site-meta">Marca (código de origen): ${escapeHtml(site.source_data.brandCode)}</div>` : ''}
+      ${site.source_data?.meterMaterial ? `<div class="site-meta">Material / referencia del Excel: ${escapeHtml(site.source_data.meterMaterial)}</div>` : ''}
+      ${site.source_data?.locationReview ? `<div class="location-review">${escapeHtml(site.source_data.locationReview)}</div>` : ''}
+      ${!located ? `<span class="badge not-located">Sin punto en el mapa</span>` : ""}
+      ${isAdmin() ? `<button class="reopen-button" data-locate="${site.id}">${hasCoordinates(site) ? 'Corregir punto' : 'Ubicar punto'}</button>` : ''}
       ${installed ? `<div class="site-meta">Instalado por ${escapeHtml(site.installed_by_name || "")} · ${formatDate(site.installed_at)}</div>` : ""}
       <div class="site-actions">
         <a class="map-button" href="${escapeHtml(site.map_url)}" target="_blank" rel="noreferrer">${located ? "Abrir mapa" : "Buscar en mapa"}</a>
@@ -227,6 +263,7 @@ async function submitVisit(event) {
 
 function reportParams() {
   return new URLSearchParams({
+    projectKey: state.projectKey,
     from: $("#report-from").value,
     to: $("#report-to").value,
     district: $("#report-district").value,
@@ -237,7 +274,9 @@ function reportParams() {
 }
 
 async function loadReport() {
-  const report = await api(`/api/reports?${reportParams()}`);
+  const params = reportParams().toString();
+  const report = await api(`/api/reports?${params}`);
+  if (params !== reportParams().toString()) return;
   $("#report-kpis").innerHTML = `
     <div class="kpi"><strong>${report.total}</strong><span>Visitas registradas</span></div>
     <div class="kpi"><strong>${report.byResult.NO_INSTALADO ?? 0}</strong><span>No instaladas</span></div>
@@ -270,8 +309,9 @@ function summaryRows(summary) {
 }
 
 async function loadReportLocalities() {
-  const params = new URLSearchParams({ district: $("#report-district").value });
+  const params = new URLSearchParams({ district: $("#report-district").value, projectKey: state.projectKey });
   const localities = await api(`/api/localities?${params}`);
+  if (params.get('projectKey') !== state.projectKey || params.get('district') !== $('#report-district').value) return;
   $("#report-locality").innerHTML =
     `<option value="">Todas las localidades</option>` +
     localities.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
@@ -302,6 +342,7 @@ function showView(name) {
   document.querySelectorAll(".nav-button[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === name);
   });
+  if (name === "sites" && sitesMap) requestAnimationFrame(() => sitesMap.invalidateSize());
   if (name === "reports") loadReport();
   if (name === "users") loadUsers();
 }
@@ -423,6 +464,98 @@ let searchTimer;
 $("#search").addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadSites, 250);
+});
+
+let sitesMap = null;
+let mapLayer = null;
+let mapSignature = '';
+function hasCoordinates(site) {
+  return Number.isFinite(site.latitude) && Number.isFinite(site.longitude) &&
+    Math.abs(site.latitude) <= 90 && Math.abs(site.longitude) <= 180;
+}
+function fitMap() {
+  if (mapLayer?.getLayers().length) sitesMap.fitBounds(mapLayer.getBounds().pad(0.08), { maxZoom: 16 });
+}
+function renderMap() {
+  const visible = state.sites.filter(hasCoordinates);
+  $('#map-count').textContent = `${visible.length} sitios ubicados de ${state.sites.length} sitios visibles`;
+  const missing = state.sites.length - visible.length;
+  $('#map-missing').textContent = missing ? `${missing} sitios sin coordenadas. Permanecen en el listado para completar su ubicación.` : '';
+  if (!window.L) { $('#map-missing').textContent = 'No se pudo cargar el mapa. El listado sigue disponible.'; return; }
+  if (!sitesMap) {
+    sitesMap = L.map('sites-map').setView([-32.1, -63.8], 7);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(sitesMap);
+    mapLayer = L.featureGroup().addTo(sitesMap);
+    mapLayer.on('popupopen', event => {
+      const element = event.popup.getElement();
+      L.DomEvent.disableClickPropagation(element);
+      element.onclick = event => {
+        const install = event.target.closest('[data-install]');
+        const visit = event.target.closest('[data-visit]');
+        if (install) openInstall(install.dataset.install);
+        if (visit) openVisit(visit.dataset.visit);
+      };
+    });
+  }
+  mapLayer.clearLayers();
+  // Exact coincident coordinates share one popup so every meter remains accessible.
+  const groups = new Map();
+  for (const site of visible) {
+    const key = `${site.latitude},${site.longitude}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(site);
+  }
+  for (const group of groups.values()) {
+    const installed = group.filter(site => site.installation_status === 'INSTALADO').length;
+    const mixed = installed > 0 && installed < group.length;
+    const color = installed === group.length ? '#14845d' : '#d97706';
+    const point = group[0];
+    const marker = L.circleMarker([point.latitude, point.longitude], {
+      radius: group.length > 1 ? 10 : 7, color: mixed ? '#14845d' : '#ffffff',
+      weight: mixed ? 4 : 2, fillColor: color, fillOpacity: 0.95,
+    });
+    marker.bindTooltip(group.length > 1 ? `${group.length} sitios: ${installed} instalados` :
+      `Medidor ${point.meter_number || point.external_id} · ${installed ? 'Instalado' : 'Pendiente'}`);
+    marker.bindPopup(group.map(site => `<div class="map-site"><strong>${escapeHtml(site.client)}</strong>
+      <div>${escapeHtml(site.address)}</div><div>Medidor ${escapeHtml(site.meter_number || '')}</div>
+      <div class="map-status ${site.installation_status === 'INSTALADO' ? 'installed' : 'pending'}">${site.installation_status === 'INSTALADO' ? 'Instalado' : 'Pendiente'}</div>
+      ${site.source_data?.locationReview ? `<p class="location-review">${escapeHtml(site.source_data.locationReview)}</p>` : ''}
+      <a href="${escapeHtml(site.map_url)}" target="_blank" rel="noreferrer">Abrir ubicación</a>
+      ${site.installation_status !== 'INSTALADO' ? `<button class="primary-button" data-install="${site.id}">Marcar instalado</button>` : ''}
+      <button class="secondary-button" data-visit="${site.id}">Comentar visita</button></div>`).join(''), { maxHeight: 330 });
+    marker.addTo(mapLayer);
+  }
+  const signature = `${state.projectKey}|${visible.map(site => `${site.id}:${site.latitude}:${site.longitude}`).join(',')}`;
+  if (signature !== mapSignature) { fitMap(); mapSignature = signature; }
+  requestAnimationFrame(() => sitesMap.invalidateSize());
+}
+
+$('#fit-map').addEventListener('click', fitMap);
+$('#project-filter').addEventListener('change', async () => {
+  clearTimeout(searchTimer);
+  state.projectKey = $('#project-filter').value;
+  localStorage.setItem('horatech-project', state.projectKey);
+  updateProjectDescription();
+  $('#district-filter').value = ''; $('#report-district').value = '';
+  $('#status-filter').value = ''; $('#search').value = '';
+  $('#report-rows').innerHTML = ''; $('#report-kpis').innerHTML = '';
+  await loadDistricts(); await loadReportLocalities(); await loadSites();
+  if (!$('#reports-view').classList.contains('hidden') && isAdmin()) await loadReport();
+});
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-locate]');
+  if (!button) return;
+  const site = state.sites.find(site => site.id === Number(button.dataset.locate));
+  const input = prompt('Coordenadas verificadas: latitud, longitud', hasCoordinates(site) ? `${site.latitude}, ${site.longitude}` : '');
+  if (!input) return;
+  const parts = input.split(',').map(value => Number(value.trim()));
+  if (parts.length !== 2 || input.split(',').some(value => !value.trim()) || !parts.every(Number.isFinite)) { toast('Ingresá latitud y longitud separadas por coma.'); return; }
+  try {
+    await api(`/api/sites/${site.id}/coordinates`, { method: 'POST', body: JSON.stringify({ latitude: parts[0], longitude: parts[1] }) });
+    await loadSites(); await loadDistricts(); toast('Punto actualizado.');
+  } catch (error) { toast(error.message); }
 });
 
 try {

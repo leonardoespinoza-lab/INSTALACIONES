@@ -572,3 +572,24 @@ dialog form {
     grid-template-columns: 1fr;
   }
 }
+
+.project-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.project-toolbar label { font-weight:800; }
+.project-toolbar select { padding:10px; border:1px solid var(--line); border-radius:10px; background:white; max-width:100%; }
+#project-description { color:var(--muted); font-size:.85rem; }
+.map-panel { margin-bottom:20px; padding:16px; }
+.map-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.map-heading h3 { margin:0; }
+#sites-map { height:480px; border-radius:12px; margin-top:12px; z-index:0; }
+.map-legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:12px; font-size:.85rem; }
+.map-legend span { display:inline-flex; align-items:center; gap:6px; }
+.dot { display:inline-block; width:12px; height:12px; border-radius:50%; }
+.dot.pending { background:#d97706; } .dot.installed { background:#14845d; }
+.dot.mixed { background:#d97706; border:3px solid #14845d; }
+.map-note { color:var(--muted); font-size:.85rem; margin:8px 0; }
+.location-review { color:#8b5200; background:#fff4dd; border-radius:6px; padding:7px; font-size:.8rem; }
+.map-site { padding:8px 0; border-bottom:1px solid var(--line); }
+.map-site button { margin:8px 4px 0 0; font-size:.8rem; }
+.map-status { font-weight:800; margin:6px 0; }
+.map-status.installed { color:#14845d; } .map-status.pending { color:#ad5f00; }
+@media(max-width:760px) { #sites-map { height:380px; } .site-actions { flex-wrap:wrap; } }

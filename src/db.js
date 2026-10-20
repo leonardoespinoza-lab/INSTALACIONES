@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { ensureProjectSchema, LEGACY_PROJECT, validateProjectImport } from "./projects.js";
 import {
   createHash,
   randomBytes,
@@ -52,6 +53,8 @@ function normalizeSite(site, index) {
   return {
     id: index + 1,
     external_id: site.externalId,
+    project_key: site.projectKey || LEGACY_PROJECT.key,
+    source_data: site.sourceData || {},
     line: site.line,
     client: site.client,
     locality: site.locality,
@@ -81,10 +84,14 @@ function dateKey(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-export async function initDb() {
-  if (!connectionString) {
+export async function initDb(database = null) {
+  if (!connectionString && !database) {
+    const preview = process.env.PROJECT_IMPORT_FILE
+      ? validateProjectImport(JSON.parse(await fs.readFile(process.env.PROJECT_IMPORT_FILE, 'utf8')))
+      : null;
     memory = {
-      sites: seedSites.map(normalizeSite),
+      sites: [...seedSites, ...(preview?.sites || [])].map(normalizeSite),
+      projects: [LEGACY_PROJECT, ...(preview ? [{ key: preview.key, name: preview.name }] : [])],
       technicians: [],
       visits: [],
       users: [],
@@ -107,7 +114,7 @@ export async function initDb() {
   }
 
   const { Pool } = await import("pg");
-  pool = new Pool({
+  pool = database || new Pool({
     connectionString,
     ssl: connectionString.includes("localhost")
       ? false
@@ -231,6 +238,8 @@ export async function initDb() {
     }
   }
 
+  await ensureProjectSchema(pool);
+
   const adminUsername = process.env.APP_USERNAME || "horatech";
   const adminPassword = process.env.APP_PASSWORD;
   if (adminPassword) {
@@ -244,16 +253,17 @@ export async function initDb() {
   }
 }
 
-export async function listSites({ district = "", status = "", q = "" }) {
+export async function listSites({ district = "", status = "", q = "", projectKey = "" } = {}) {
   if (memory) {
     const search = q.toLowerCase();
     return memory.sites
+      .filter(site => !projectKey || site.project_key === projectKey)
       .filter((site) => !district || site.district === district)
       .filter((site) => !status || site.installation_status === status)
       .filter(
         (site) =>
           !search ||
-          [site.client, site.external_id, site.address, site.locality, site.district].some(
+          [site.client, site.external_id, site.address, site.locality, site.district, site.meter_number].some(
             (value) =>
               String(value ?? "")
                 .toLowerCase()
@@ -279,18 +289,19 @@ export async function listSites({ district = "", status = "", q = "" }) {
          s.external_id ILIKE '%' || $3 || '%' OR
          s.address ILIKE '%' || $3 || '%' OR
          s.locality ILIKE '%' || $3 || '%' OR
-         s.district ILIKE '%' || $3 || '%'
+         s.district ILIKE '%' || $3 || '%' OR s.meter_number ILIKE '%' || $3 || '%'
        )
+       AND ($4 = '' OR s.project_key = $4)
      ORDER BY s.district, s.locality, s.client`,
-    [district, status, q],
+    [district, status, q, projectKey],
   );
   return rows;
 }
 
-export async function listDistricts() {
+export async function listDistricts(projectKey = "") {
   if (memory) {
     const groups = new Map();
-    for (const site of memory.sites) {
+    for (const site of memory.sites.filter(site => !projectKey || site.project_key === projectKey)) {
       const item = groups.get(site.district) ?? {
         district: site.district,
         total: 0,
@@ -313,16 +324,18 @@ export async function listDistricts() {
       COUNT(*) FILTER (WHERE installation_status = 'INSTALADO')::int AS installed,
       COUNT(*) FILTER (WHERE location_status = 'NO_SE_PUDO_UBICAR')::int AS not_located
     FROM sites
+    WHERE ($1 = '' OR project_key = $1)
     GROUP BY district
     ORDER BY district
-  `);
+  `, [projectKey]);
   return rows;
 }
 
-export async function listLocalities(district = "") {
+export async function listLocalities(district = "", projectKey = "") {
   if (memory) {
     return [...new Set(
       memory.sites
+        .filter(site => !projectKey || site.project_key === projectKey)
         .filter((site) => !district || site.district === district)
         .map((site) => site.locality)
         .filter(Boolean),
@@ -334,8 +347,9 @@ export async function listLocalities(district = "") {
      FROM sites
      WHERE locality IS NOT NULL AND locality <> ''
        AND ($1 = '' OR district = $1)
+       AND ($2 = '' OR project_key = $2)
      ORDER BY locality`,
-    [district],
+    [district, projectKey],
   );
   return rows.map((row) => row.locality);
 }
@@ -703,6 +717,7 @@ export async function getReport({
   from,
   to,
   technicianId = "",
+  projectKey = "",
   district = "",
   locality = "",
   status = "",
@@ -715,6 +730,7 @@ export async function getReport({
         (!from || key >= from) &&
         (!to || key <= to) &&
         (!technicianId || visit.technician_id === Number(technicianId)) &&
+        (!projectKey || site?.project_key === projectKey) &&
         (!district || site?.district === district) &&
         (!locality || site?.locality === locality) &&
         (!status || visit.result === status)
@@ -755,8 +771,9 @@ export async function getReport({
        AND ($4 = '' OR s.district = $4)
        AND ($5 = '' OR s.locality = $5)
        AND ($6 = '' OR v.result = $6)
+       AND ($7 = '' OR s.project_key = $7)
      ORDER BY v.visited_at DESC`,
-    [from || null, to || null, technicianId || null, district, locality, status],
+    [from || null, to || null, technicianId || null, district, locality, status, projectKey],
   );
   return summarizeReport(rows);
 }
@@ -785,4 +802,32 @@ function summarizeReport(rows) {
   }
 
   return { total: rows.length, byDay, byMonth, byTechnician, byResult, rows };
+}
+
+export async function listProjects() {
+  if (memory) return memory.projects.map(project => ({ ...project,
+    total: memory.sites.filter(site => site.project_key === project.key).length }));
+  const { rows } = await pool.query(`SELECT p.key, p.name, COUNT(s.id)::int AS total
+    FROM projects p LEFT JOIN sites s ON s.project_key = p.key
+    GROUP BY p.key, p.name ORDER BY p.created_at, p.key`);
+  return rows;
+}
+
+export async function updateCoordinates(siteId, latitude, longitude) {
+  if (typeof latitude !== 'number' || typeof longitude !== 'number' ||
+      !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 || Math.abs(longitude) > 180) throw new Error('Coordenadas inválidas.');
+  const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  if (memory) {
+    const site = memory.sites.find(item => item.id === Number(siteId));
+    if (!site) throw new Error('Sitio inexistente.');
+    Object.assign(site, { latitude, longitude, map_url: url,
+      coordinate_text: `${latitude}, ${longitude}`, location_status: 'UBICADO_MANUAL' });
+    return site;
+  }
+  const { rows } = await pool.query(`UPDATE sites SET latitude=$2, longitude=$3,
+    coordinate_text=$4, map_url=$5, location_status='UBICADO_MANUAL', updated_at=NOW()
+    WHERE id=$1 RETURNING *`, [siteId, latitude, longitude, `${latitude}, ${longitude}`, url]);
+  if (!rows.length) throw new Error('Sitio inexistente.');
+  return rows[0];
 }
