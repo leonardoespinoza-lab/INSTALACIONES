@@ -100,3 +100,9 @@ Configurar MAPBOX_PUBLIC_TOKEN en Railway con un token público pk. El token no 
 versiona en el repositorio. Se puede alternar entre las vistas 2D y 3D desde el mapa.
 Los edificios 3D se muestran donde el proveedor tiene cobertura. El cambio de estado se guarda
 en PostgreSQL en producción y se refleja en el mapa después de registrarlo.
+
+El mapa incluye relieve real (Terrain DEM, exageración 1.3), agrupación automática
+de sitios por proximidad y control Mi ubicación (requiere permiso del navegador).
+Los números cuentan medidores, incluidos los coincidentes; los grupos verdes están
+completamente instalados y el borde verde indica una instalación parcial.
+El relieve y las capas de sitios se restauran al cambiar de mapa base.

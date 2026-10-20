@@ -477,7 +477,9 @@ $("#search").addEventListener("input", () => {
 
 let sitesMap = null;
 let mapStyle = 'standard-satellite';
-let mapMarkers = [];
+let mapGroups = new Map();
+let mapData = { type: 'FeatureCollection', features: [] };
+let mapPopup = null;
 let mapSignature = '';
 function hasCoordinates(site) {
   return Number.isFinite(site.latitude) && Number.isFinite(site.longitude) &&
@@ -508,6 +510,27 @@ function renderMap() {
         config: { basemap: { lightPreset: 'day', showRoadLabels: true, show3dObjects: true } }
       });
       sitesMap.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+      const geolocate = new mapboxgl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true }, trackUserLocation: true, showUserHeading: true
+      });
+      sitesMap.addControl(geolocate, 'top-right');
+      const locationButton = sitesMap.getContainer().querySelector('.mapboxgl-ctrl-geolocate');
+      if (locationButton) { locationButton.title = 'Mi ubicación'; locationButton.setAttribute('aria-label', 'Mi ubicación'); }
+      geolocate.on('error', event => toast(event.code === 1 ? 'Permití el acceso a tu ubicación para usar este botón.' : 'No se pudo obtener tu ubicación. Revisá el GPS y volvé a intentar.'));
+      sitesMap.on('style.load', configureMapLayers);
+      sitesMap.on('click', event => {
+        if (!sitesMap.getLayer('site-points')) return;
+        const feature = sitesMap.queryRenderedFeatures(event.point, { layers: ['site-clusters', 'site-points'] })[0];
+        if (!feature) return;
+        if (feature.properties.cluster) {
+          sitesMap.getSource('site-data').getClusterExpansionZoom(feature.properties.cluster_id, (error, zoom) => {
+            if (!error) sitesMap.easeTo({ center: feature.geometry.coordinates, zoom, duration: 600 });
+          });
+        } else showSitePopup(mapGroups.get(feature.properties.groupKey) || []);
+      });
+      sitesMap.on('mousemove', event => {
+        if (sitesMap.getLayer('site-points')) sitesMap.getCanvas().style.cursor = sitesMap.queryRenderedFeatures(event.point, { layers: ['site-clusters', 'site-points'] }).length ? 'pointer' : '';
+      });
       sitesMap.on('error', () => {
         $('#map-missing').textContent = 'No se pudo cargar una parte del mapa. Revisá la conexión o el acceso a Mapbox.';
       });
@@ -515,29 +538,45 @@ function renderMap() {
       $('#map-missing').textContent = 'Este navegador no pudo iniciar la vista 3D. El listado sigue disponible.'; return;
     }
   }
-  mapMarkers.forEach(marker => marker.remove());
-  mapMarkers = [];
-  // Exact coincident coordinates share one popup so every meter remains accessible.
-  const groups = new Map();
+  mapPopup?.remove();
+  mapGroups = new Map();
   for (const site of visible) {
     const key = `${site.latitude},${site.longitude}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(site);
+    if (!mapGroups.has(key)) mapGroups.set(key, []);
+    mapGroups.get(key).push(site);
   }
-  for (const group of groups.values()) {
-    const installed = group.filter(site => site.installation_status === 'INSTALADO').length;
-    const mixed = installed > 0 && installed < group.length;
-    const color = installed === group.length ? '#14845d' : '#d97706';
-    const point = group[0];
-    const element = document.createElement('button');
-    element.className = 'mapbox-site-marker';
-    element.style.backgroundColor = color;
-    element.style.borderColor = mixed ? '#14845d' : '#fff';
-    element.style.borderWidth = mixed ? '4px' : '2px';
-    element.title = group.length > 1 ? `${group.length} sitios: ${installed} instalados` :
-      `Medidor ${point.meter_number || point.external_id} · ${installed ? 'Instalado' : 'Pendiente'}`;
-    element.setAttribute('aria-label', element.title);
-    element.textContent = group.length > 1 ? group.length : '';
+  mapData = { type: 'FeatureCollection', features: [...mapGroups].map(([groupKey, group]) => ({
+    type: 'Feature', geometry: { type: 'Point', coordinates: [group[0].longitude, group[0].latitude] },
+    properties: { groupKey, total: group.length, installed: group.filter(site => site.installation_status === 'INSTALADO').length }
+  })) };
+  sitesMap.getSource('site-data')?.setData(mapData);
+  const signature = `${state.projectKey}|${visible.map(site => `${site.id}:${site.latitude}:${site.longitude}`).join(',')}`;
+  if (signature !== mapSignature) { fitMap(); mapSignature = signature; }
+  requestAnimationFrame(() => sitesMap.resize());
+}
+
+function configureMapLayers() {
+  sitesMap.addSource('mapbox-dem', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 });
+  sitesMap.setTerrain({ source: 'mapbox-dem', exaggeration: 1.3 });
+  sitesMap.addSource('site-data', {
+    type: 'geojson', data: mapData, cluster: true, clusterMaxZoom: 14, clusterRadius: 50,
+    clusterProperties: { total: ['+', ['get', 'total']], installed: ['+', ['get', 'installed']] }
+  });
+  const color = ['case', ['==', ['get', 'installed'], ['get', 'total']], '#14845d', '#d97706'];
+  for (const [id, clustered] of [['site-clusters', true], ['site-points', false]]) {
+    sitesMap.addLayer({ id, type: 'circle', source: 'site-data', slot: 'top',
+      filter: clustered ? ['has', 'point_count'] : ['!', ['has', 'point_count']],
+      paint: { 'circle-color': color, 'circle-radius': clustered ? ['step', ['get', 'total'], 19, 10, 24, 100, 30] : 12,
+        'circle-stroke-width': 3, 'circle-stroke-color': ['case', ['all', ['>', ['get', 'installed'], 0], ['<', ['get', 'installed'], ['get', 'total']]], '#14845d', '#ffffff'] }
+    });
+  }
+  sitesMap.addLayer({ id: 'site-counts', type: 'symbol', source: 'site-data', slot: 'top',
+    filter: ['>', ['get', 'total'], 1], layout: { 'text-field': ['to-string', ['get', 'total']], 'text-size': 13, 'text-allow-overlap': true },
+    paint: { 'text-color': '#ffffff' }
+  });
+}
+function showSitePopup(group) {
+  if (!group.length) return;
     const content = document.createElement('div');
     content.className = 'map-popup-content';
     content.innerHTML = group.map(site => `<div class="map-site"><strong>${escapeHtml(site.client)}</strong>
@@ -556,14 +595,8 @@ function renderMap() {
       if (install) openInstall(install.dataset.install);
       if (visit) openVisit(visit.dataset.visit);
     };
-    const popup = new mapboxgl.Popup({ offset: 15, maxWidth: '330px' }).setDOMContent(content);
-    const marker = new mapboxgl.Marker({ element, anchor: 'center' })
-      .setLngLat([point.longitude, point.latitude]).setPopup(popup).addTo(sitesMap);
-    mapMarkers.push(marker);
-  }
-  const signature = `${state.projectKey}|${visible.map(site => `${site.id}:${site.latitude}:${site.longitude}`).join(',')}`;
-  if (signature !== mapSignature) { fitMap(); mapSignature = signature; }
-  requestAnimationFrame(() => sitesMap.resize());
+    mapPopup?.remove();
+    mapPopup = new mapboxgl.Popup({ offset: 15, maxWidth: '330px' }).setLngLat([group[0].longitude, group[0].latitude]).setDOMContent(content).addTo(sitesMap);
 }
 
 $('#fit-map').addEventListener('click', fitMap);
