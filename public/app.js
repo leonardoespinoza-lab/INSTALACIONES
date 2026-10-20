@@ -184,6 +184,15 @@ function renderSites() {
     .join("");
 }
 
+function meterModelDetail(site) {
+  if (site.meter_model) return `Modelo: ${site.meter_model}`;
+  const reference = site.source_data?.meterMaterial;
+  if (!reference) return '';
+  return reference === 'MEDIDOR_CONSUMO'
+    ? 'Modelo no especificado en el Excel'
+    : `Modelo / referencia: ${reference}`;
+}
+
 function siteCard(site) {
   const installed = site.installation_status === "INSTALADO";
   const located = site.location_status !== "NO_SE_PUDO_UBICAR";
@@ -196,9 +205,8 @@ function siteCard(site) {
       <div class="site-address">${escapeHtml(site.address || "Sin dirección")}</div>
       <div class="site-meta">Localidad: ${escapeHtml(site.locality)}${site.meter_number ? ` · Medidor ${escapeHtml(site.meter_number)}` : ""}</div>
       ${site.meter_brand ? `<div class="site-meta">Marca: ${escapeHtml(site.meter_brand)}</div>` : ''}
-      ${site.meter_model ? `<div class="site-meta">Modelo: ${escapeHtml(site.meter_model)}</div>` : ''}
+      ${meterModelDetail(site) ? `<div class="site-meta"><strong>${escapeHtml(meterModelDetail(site))}</strong></div>` : ''}
       ${site.source_data?.brandCode && !site.meter_brand ? `<div class="site-meta">Marca (código de origen): ${escapeHtml(site.source_data.brandCode)}</div>` : ''}
-      ${site.source_data?.meterMaterial ? `<div class="site-meta">Material / referencia del Excel: ${escapeHtml(site.source_data.meterMaterial)}</div>` : ''}
       ${site.source_data?.locationReview ? `<div class="location-review">${escapeHtml(site.source_data.locationReview)}</div>` : ''}
       ${!located ? `<span class="badge not-located">Sin punto en el mapa</span>` : ""}
       ${isAdmin() ? `<button class="reopen-button" data-locate="${site.id}">${hasCoordinates(site) ? 'Corregir punto' : 'Ubicar punto'}</button>` : ''}
@@ -533,6 +541,8 @@ function renderMap() {
     content.className = 'map-popup-content';
     content.innerHTML = group.map(site => `<div class="map-site"><strong>${escapeHtml(site.client)}</strong>
       <div>${escapeHtml(site.address)}</div><div>Medidor ${escapeHtml(site.meter_number || '')}</div>
+      ${site.meter_brand ? `<div>Marca: ${escapeHtml(site.meter_brand)}</div>` : ''}
+      ${meterModelDetail(site) ? `<div><strong>${escapeHtml(meterModelDetail(site))}</strong></div>` : ''}
       <div class="map-status ${site.installation_status === 'INSTALADO' ? 'installed' : 'pending'}">${site.installation_status === 'INSTALADO' ? 'Instalado' : 'Pendiente'}</div>
       ${site.source_data?.locationReview ? `<p class="location-review">${escapeHtml(site.source_data.locationReview)}</p>` : ''}
       <a href="${escapeHtml(site.map_url)}" target="_blank" rel="noreferrer">Abrir ubicación</a>
